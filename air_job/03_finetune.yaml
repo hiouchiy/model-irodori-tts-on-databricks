@@ -1,0 +1,40 @@
+experiment_name: irodori_tts_finetune
+mlflow_run_name: lora_poc_a10
+
+environment:
+  version: '4'
+  dependencies:
+    - uv
+
+env_variables:
+  HF_HUB_ENABLE_HF_TRANSFER: "0"
+
+compute:
+  num_accelerators: 1
+  accelerator_type: GPU_1xA10
+
+code_source:
+  type: snapshot
+  snapshot:
+    root_path: ..
+
+max_retries: 0
+timeout_minutes: 90
+
+command: |
+  set -euo pipefail
+  cd "$CODE_SOURCE_PATH"
+  command -v uv >/dev/null 2>&1 || pip install -q uv
+  export UV_PROJECT_ENVIRONMENT=/tmp/tts_venv
+  export UV_CACHE_DIR=/tmp/uv_cache
+  export HF_HUB_ENABLE_HF_TRANSFER=0
+  echo "[air] ===== uv sync (cu128) ====="
+  uv sync --extra cu128 --no-install-project 2>&1 | tail -10
+  echo "[air] ===== LoRA fine-tune PoC ====="
+  uv run --no-sync python air_job/finetune/finetune_poc.py
+  echo "[air] ===== copy artifacts to volume ====="
+  DEST=/Volumes/hiroshi/air_samples/tts/finetune
+  mkdir -p "$DEST"
+  cp -r /tmp/ft/samples/* "$DEST/" 2>/dev/null || true
+  cp /tmp/ft/manifest.jsonl "$DEST/" 2>/dev/null || true
+  echo "[air] ===== done ====="; ls -laR "$DEST" | head -40

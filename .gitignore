@@ -1,0 +1,22 @@
+# Generated media / large artifacts (regenerate with the tools; never commit)
+outputs/
+*.wav
+*.mp4
+*.png
+*.jpg
+notes_cleaned.json
+
+# Local-only / proprietary
+archive/
+_ref.wav
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

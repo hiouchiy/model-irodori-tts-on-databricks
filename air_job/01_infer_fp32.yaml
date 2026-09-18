@@ -1,0 +1,56 @@
+experiment_name: irodori_tts_infer
+mlflow_run_name: infer_fp32_a10
+
+# --- AIR base image: we only need `uv`; the real (bleeding-edge) stack
+#     (torch 2.10 / cu128, transformers 5.x, dacvae+silentcipher from git)
+#     is reproduced from the repo's uv.lock inside the job. ---
+environment:
+  version: '4'
+  dependencies:
+    - uv
+
+env_variables:
+  # AIR presets HF_HUB_ENABLE_HF_TRANSFER=1 but does not install hf_transfer.
+  HF_HUB_ENABLE_HF_TRANSFER: "0"
+
+compute:
+  num_accelerators: 1
+  accelerator_type: GPU_1xA10
+
+code_source:
+  type: snapshot
+  snapshot:
+    root_path: ..          # -> /databricks/code_source/Irodori-TTS
+
+max_retries: 0
+timeout_minutes: 90
+
+command: |
+  set -euo pipefail
+  echo "[air] ===== GPU ====="; nvidia-smi || true
+  cd "$CODE_SOURCE_PATH"
+  command -v uv >/dev/null 2>&1 || pip install -q uv
+  echo "[air] uv: $(uv --version)"
+  export UV_PROJECT_ENVIRONMENT=/tmp/tts_venv
+  export UV_CACHE_DIR=/tmp/uv_cache
+  export HF_HUB_ENABLE_HF_TRANSFER=0
+  echo "[air] ===== uv sync (cu128, from lockfile) ====="
+  uv sync --extra cu128 --no-install-project 2>&1 | tail -40
+  echo "[air] ===== torch sanity ====="
+  uv run --no-sync python -c "import torch; print('torch', torch.__version__, 'cuda_avail', torch.cuda.is_available(), 'cuda', torch.version.cuda)"
+  # libsndfile/torchaudio do random seeks when writing WAV headers, which the
+  # UC Volume FUSE mount rejects ("System error"). Write to local disk first,
+  # then copy the finished file to the Volume (sequential write, FUSE-safe).
+  LOCAL_OUT=/tmp/databricks_intro_fp32.wav
+  VOL_OUT=/Volumes/hiroshi/air_samples/tts/databricks_intro_fp32.wav
+  echo "[air] ===== synthesize ====="
+  uv run --no-sync python infer.py \
+    --hf-checkpoint Aratako/Irodori-TTS-v4.1-Small \
+    --no-ref \
+    --model-device cuda --codec-device cuda \
+    --max-text-len 512 \
+    --text "$(cat "$CODE_SOURCE_PATH/air_job/databricks_text.txt")" \
+    --output-wav "$LOCAL_OUT"
+  echo "[air] ===== copy to volume ====="
+  cp "$LOCAL_OUT" "$VOL_OUT"
+  echo "[air] ===== done ====="; ls -la "$LOCAL_OUT" "$VOL_OUT"
