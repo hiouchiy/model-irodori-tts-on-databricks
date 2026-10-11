@@ -48,12 +48,14 @@ databricks serving-endpoints query irodori-tts-express --profile DEFAULT \
 ```
 
 レスポンスの `audio_wav_b64` を base64 デコードすれば WAV が得られます（デコード例は GUIDE.md 第4章）。
+全パラメータとレスポンスの仕様は [`docs/SERVING-API.md`](docs/SERVING-API.md)。
 
 ## リポジトリ構成
 
 ```
 ├── README.md                想像上の最短経路（このファイル）
 ├── docs/GUIDE.md            ★ 網羅的な手順書（未経験者向け・省略なし）
+├── docs/SERVING-API.md      サービングエンドポイントの API 仕様（正本）
 ├── air_job/
 │   ├── serving/serve_irodori_tts_express.py   サービング登録ノートブック（自己完結・本命）
 │   ├── finetune/finetune_poc.py               LoRA ファインチューン疎通デモ

@@ -290,45 +290,7 @@ PY
 
 ## 5. サービング API 仕様
 
-### 入力（`dataframe_records` の各行）
-| フィールド | 型 | 説明 |
-|---|---|---|
-| `text` | string | 読み上げるテキスト（**1 回の合成は日本語で ~256 トークン / 約 30 秒が上限**。長文は分割推奨、第6章） |
-| `params_json` | string | 合成パラメータの JSON 文字列（省略不可。無指定は `"{}"`） |
-
-`params_json` には **モデルの `SamplingRequest` が持つ全フィールド**を渡せます（`dataclasses` から動的に受理するため、
-モデル更新にも自動追従）。主なもの:
-
-| キー | 既定 | 説明 |
-|---|---|---|
-| `num_steps` | 40 | サンプリングステップ数。品質/速度の第一ノブ |
-| `cfg_scale_text` | 3.0 | テキスト条件の強さ。発音が弱いとき上げる |
-| `caption` | なし | 声・話し方の指定（VoiceDesign）。例「落ち着いた女性、ゆっくり」 |
-| `cfg_scale_caption` | 3.0 | caption 条件の強さ |
-| `duration_scale` | 1.0 | 予測長の倍率（>1 で長く、<1 で短く） |
-| `seed` | ランダム | 乱数シード（再現性） |
-| `ref_wav_b64` | なし | **参照音声（base64 WAV）＝ボイスクローン**。指定すると話者を固定 |
-| `cfg_scale_speaker` | 5.0 | 参照話者条件の強さ |
-| `t_schedule_mode` / `sway_coeff` | linear / -1.0 | 高速化（`sway` + 少ステップ） |
-| `truncation_factor` | なし | 0.8〜0.9 で表現の揺れを抑制 |
-
-**パラメータ自己記述（エージェント向け）**: `params_json` に `{"__list_params__": true}` を渡すと、
-対応パラメータ一覧と既定値が `messages` に返ります（合成はされません）。
-
-### 出力（各行）
-| フィールド | 説明 |
-|---|---|
-| `audio_wav_b64` | 生成音声（WAV, 48kHz, mono, 16bit）の base64 |
-| `sample_rate` / `audio_seconds` / `synth_seconds` | サンプルレート / 音声長 / 合成所要秒 |
-| `used_seed` | 実際に使われたシード |
-| `messages` | ランタイム注記（長さ予測やクランプ等）の JSON 文字列 |
-| `applied_params` | 実際に適用したパラメータの JSON 文字列 |
-| `error` | エラー時のメッセージ（正常時は空文字） |
-
-例（caption で話し方を変える）:
-```json
-{"dataframe_records":[{"text":"本日はご来場ありがとうございます。","params_json":"{\"caption\":\"落ち着いた男性、ゆっくり丁寧に\",\"num_steps\":60}"}]}
-```
+リクエストの全カラム・`params_json` の全キー・レスポンス・例・性能・制約は **[SERVING-API.md](SERVING-API.md)** にまとめてある（仕様の正本。ここには写さない）。
 
 ---
 
