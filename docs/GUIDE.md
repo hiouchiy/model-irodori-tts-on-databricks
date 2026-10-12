@@ -131,7 +131,7 @@ databricks catalogs list --profile DEFAULT          # 書き込めるカタロ�
 
 ```bash
 git clone <this-repo-url>
-cd irodori-tts-databricks
+cd model-irodori-tts-on-databricks
 ```
 
 > 上流の Irodori-TTS 本体は**同梱していません**。サービング用ノートブックが実行時に自動で
@@ -370,7 +370,7 @@ git clone https://github.com/Aratako/Irodori-TTS.git
 cd Irodori-TTS
 git checkout 89f9d8fbd4d51ea019867ee1197725ede1df13c5
 # 本リポジトリの air_job/ を上流へ配置
-cp -r ../irodori-tts-databricks/air_job ./air_job
+cp -r ../model-irodori-tts-on-databricks/air_job ./air_job
 ```
 
 ### 8-2. Volume パスを自分の環境に変更

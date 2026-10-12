@@ -18,7 +18,7 @@
 
 ```bash
 # 0) 前提: Databricks CLI インストール済み・認証済み（詳細は GUIDE.md 第2章）
-git clone <this-repo-url> && cd irodori-tts-databricks
+git clone <this-repo-url> && cd model-irodori-tts-on-databricks
 
 # 1) 登録ノートブックをワークスペースへアップロード
 databricks workspace import /Workspace/Users/<you>/tts_express/serve_irodori_tts_express \
