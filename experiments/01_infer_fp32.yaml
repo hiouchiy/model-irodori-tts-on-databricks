@@ -42,7 +42,7 @@ command: |
   # UC Volume FUSE mount rejects ("System error"). Write to local disk first,
   # then copy the finished file to the Volume (sequential write, FUSE-safe).
   LOCAL_OUT=/tmp/databricks_intro_fp32.wav
-  VOL_OUT=/Volumes/hiroshi/air_samples/tts/databricks_intro_fp32.wav
+  VOL_OUT=/Volumes/<CATALOG>/<SCHEMA>/<VOLUME>/irodori/databricks_intro_fp32.wav
   echo "[air] ===== synthesize ====="
   uv run --no-sync python infer.py \
     --hf-checkpoint Aratako/Irodori-TTS-v4.1-Small \

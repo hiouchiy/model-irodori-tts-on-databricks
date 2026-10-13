@@ -1,0 +1,54 @@
+# AI Runtime CLI spec — Irodori-TTS synthesis on a single A10.
+#
+# Run it with:
+#   COPYFILE_DISABLE=1 air run --file air_job/generate.yaml --watch --profile <PROFILE>
+#
+# The runtime is installed by scripts/install.sh inside `command:` (not environment.dependencies), the same
+# recipe the notebook uses. The WAV is written to local disk and then copied to a UC Volume: libsndfile seeks while
+# writing WAV headers, which the Volume (FUSE) mount rejects.
+
+experiment_name: irodori_tts_generate
+mlflow_run_name: irodori_tts_a10
+
+environment:
+  version: "4"          # Python 3.12; torch 2.10/cu128 replaces the preinstalled torch
+  dependencies:         # the runtime comes from scripts/install.sh; AIR requires a non-empty list here
+    - "soundfile"
+
+env_variables:
+  # AIR presets HF_HUB_ENABLE_HF_TRANSFER=1 but does not install hf_transfer.
+  HF_HUB_ENABLE_HF_TRANSFER: "0"
+
+compute:
+  num_accelerators: 1
+  accelerator_type: GPU_1xA10
+
+code_source:
+  type: snapshot
+  snapshot:
+    root_path: ..        # -> /databricks/code_source/model-irodori-tts-on-databricks
+
+max_retries: 0
+timeout_minutes: 60
+
+command: |
+  set -euo pipefail
+  # >>> EDIT: the UC Volume the generated audio is copied to. Create it first:
+  #     /Volumes/<CATALOG>/<SCHEMA>/<VOLUME>  (see README "Prerequisites and configuration").
+  DEST="/Volumes/main/default/tts/irodori"
+
+  echo "[air] ===== GPU ====="; nvidia-smi || true
+  cd "$CODE_SOURCE_PATH"
+  export HF_HOME=/tmp/hf_home
+  echo "[air] ===== install (scripts/install.sh) ====="
+  bash scripts/install.sh
+
+  echo "[air] ===== synthesize ====="
+  OUT=/tmp/irodori_out/databricks_intro.wav
+  python generate.py --text-file examples/databricks_text.txt --out "$OUT" \
+    --params '{"seed": 42, "max_text_len": 512}'
+
+  echo "[air] ===== copy to UC Volume ====="
+  mkdir -p "$DEST"
+  cp /tmp/irodori_out/* "$DEST/"
+  echo "[air] ===== done ====="; ls -la "$DEST"

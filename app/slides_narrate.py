@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tts_app  # reuse _invoke / _fm_group / _chunk_text / _concat_wavs / _fm_call / CFG
 
 # Path to a helper that prints a Google OAuth access token on `token`. Override with the
-# GOOGLE_AUTH_SCRIPT env var. See docs/GUIDE.md (Slides→動画) for how to obtain a token.
+# GOOGLE_AUTH_SCRIPT env var. See README.md ("Apps") for how to obtain a token.
 AUTH = os.environ.get("GOOGLE_AUTH_SCRIPT", os.path.expanduser(
     "~/.vibe/marketplace/plugins/fe-google-tools/skills/google-auth/resources/google_auth.py"))
 QUOTA = "gcp-sandbox-field-eng"

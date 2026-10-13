@@ -1,5 +1,5 @@
-experiment_name: irodori_tts_infer
-mlflow_run_name: bench_quant_a10
+experiment_name: irodori_tts_finetune
+mlflow_run_name: lora_poc_a10
 
 environment:
   version: '4'
@@ -23,18 +23,18 @@ timeout_minutes: 90
 
 command: |
   set -euo pipefail
-  echo "[air] ===== GPU ====="; nvidia-smi || true
   cd "$CODE_SOURCE_PATH"
   command -v uv >/dev/null 2>&1 || pip install -q uv
   export UV_PROJECT_ENVIRONMENT=/tmp/tts_venv
   export UV_CACHE_DIR=/tmp/uv_cache
   export HF_HUB_ENABLE_HF_TRANSFER=0
   echo "[air] ===== uv sync (cu128) ====="
-  uv sync --extra cu128 --no-install-project 2>&1 | tail -20
-  echo "[air] ===== benchmark ====="
-  uv run --no-sync python air_job/bench_quant.py
-  echo "[air] ===== copy results to volume ====="
-  DEST=/Volumes/hiroshi/air_samples/tts/bench
+  uv sync --extra cu128 --no-install-project 2>&1 | tail -10
+  echo "[air] ===== LoRA fine-tune PoC ====="
+  uv run --no-sync python air_job/finetune/finetune_poc.py
+  echo "[air] ===== copy artifacts to volume ====="
+  DEST=/Volumes/<CATALOG>/<SCHEMA>/<VOLUME>/irodori/finetune
   mkdir -p "$DEST"
-  for f in /tmp/tts_bench/*; do cp "$f" "$DEST/"; done
-  echo "[air] ===== done ====="; ls -la "$DEST"
+  cp -r /tmp/ft/samples/* "$DEST/" 2>/dev/null || true
+  cp /tmp/ft/manifest.jsonl "$DEST/" 2>/dev/null || true
+  echo "[air] ===== done ====="; ls -laR "$DEST" | head -40
