@@ -1,10 +1,14 @@
 # Serving API — Irodori-TTS (Japanese text-to-speech)
 
-The single source for the API of the Model Serving endpoint this repo deploys (e.g. `irodori-tts-express`). How to
-register and deploy it: [README](../README.md) "3. Model Serving".
+The single source for the API of the Model Serving endpoints this repo deploys (e.g. `irodori-tts-express` for v4.1-Small,
+`irodori-tts-large` for v4-Large). How to register and deploy them: [README](../README.md) "3. Model Serving"; which
+model to choose: README "Choosing a model".
 
-Model: [`Aratako/Irodori-TTS-v4.1-Small`](https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small) (0.8B, flow matching
-RF-DiT, DACVAE 48 kHz codec, MIT). It is served with env_pack (GPU Express Deployment), which restores the torch 2.10 /
+Models: [`Aratako/Irodori-TTS-v4.1-Small`](https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small) (0.8B, MIT) or
+[`Aratako/Irodori-TTS-v4-Large`](https://huggingface.co/Aratako/Irodori-TTS-v4-Large) (3.29B, Gemma Terms of Use), both
+flow matching RF-DiT with a DACVAE 48 kHz codec. **The API is the same for both**; one endpoint serves one model
+(fixed at registration). The accepted `params_json` keys and their defaults come from the loaded model, so ask each
+endpoint with `__list_params__`. It is served with env_pack (GPU Express Deployment), which restores the torch 2.10 /
 cu128 environment it was registered from. The PyFunc is [`serving/irodori_pyfunc.py`](../serving/irodori_pyfunc.py);
 the request handling is `irodori_core.Synthesizer` ([`irodori_core.py`](../irodori_core.py)).
 

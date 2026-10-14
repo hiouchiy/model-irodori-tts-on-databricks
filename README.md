@@ -1,10 +1,13 @@
-# Irodori-TTS on Databricks — Japanese text-to-speech on one A10 GPU
+# Irodori-TTS on Databricks — Japanese text-to-speech on one A10 GPU (v4.1-Small or v4-Large)
 
 ## What this is
 
-Run the Japanese TTS model **[Irodori-TTS](https://github.com/Aratako/Irodori-TTS)**
-([`Aratako/Irodori-TTS-v4.1-Small`](https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small): 0.8B, flow matching
-RF-DiT + DACVAE 48 kHz codec) on **Databricks**. One API exposes the whole model:
+Run the Japanese TTS model **[Irodori-TTS](https://github.com/Aratako/Irodori-TTS)** on **Databricks**. It is a flow
+matching RF-DiT with a DACVAE 48 kHz codec, in two sizes; pick one per endpoint ([Choosing a model](#choosing-a-model)):
+- [`Aratako/Irodori-TTS-v4.1-Small`](https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small), 0.8B, MIT;
+- [`Aratako/Irodori-TTS-v4-Large`](https://huggingface.co/Aratako/Irodori-TTS-v4-Large), 3.29B, Gemma Terms of Use.
+
+One API exposes the whole model:
 
 - any field of upstream `SamplingRequest` (~43 knobs: seed, caption / voice design, steps, CFG, duration, ...) via
   `params_json`, discovered dynamically with `{"__list_params__": true}`;
@@ -17,7 +20,25 @@ It needs torch 2.10 / CUDA 12.8, which standard GPU Model Serving overwrites wit
 therefore registered with **env_pack (GPU Express Deployment)**, which restores the registering notebook's
 environment as is ([docs/REPORT.md](docs/REPORT.md) §2).
 
-**Licence:** Irodori-TTS code and weights are MIT (Aratako). See [Licence](#licence).
+**Licence:** the code and v4.1-Small are MIT (Aratako). v4-Large is under the **Gemma Terms of Use**, because its
+text encoder is derived from Google's T5Gemma 2. See [Licence](#licence).
+
+## Choosing a model
+
+Both run on the same code, the same runtime and the same API. The model is chosen once per registration (the
+`model` parameter of `notebooks/register_serving`), and each gets its own UC model and endpoint.
+
+| | **v4.1-Small** (default) | **v4-Large** |
+|---|---|---|
+| Size | 0.8B | 3.29B: 24-layer, 2048-dim DiT, T5Gemma 2 text/caption encoder |
+| Strengths (upstream model cards) | **Kanji reading** (Joyo reading accuracy 93.4 % vs 92.8 %, JSUT Kana-CER 3.43 % vs 3.67 %) | **Voice design**: caption adherence 4.30 vs 4.23 of 5. **Voice cloning**: speaker similarity at every reference length; references up to 120 s |
+| Choose it for | Narration where reading accuracy matters (slides, documents) | Voices designed from a caption, cloning from ~30 s or more of reference audio, emoji style control |
+| Licence | MIT | Gemma Terms of Use + Prohibited Use Policy, and the model card's own restrictions (no impersonation without consent, no deceptive deepfakes) |
+| `model` value | `v4.1-small` | `v4-large` |
+| Endpoint here | `irodori-tts-express` | `irodori-tts-large` |
+| GPU | A10 | A10: peak 12.8 GiB in bf16 (measured 2026-10-14) |
+
+Revisions are pinned in `irodori_core.MODELS`. Both need the same upstream commit (`89f9d8f` added v4-Large support).
 
 ## Ways to run
 
@@ -29,7 +50,7 @@ environment as is ([docs/REPORT.md](docs/REPORT.md) §2).
 
 All three use the same core, [`irodori_core.py`](irodori_core.py). It holds:
 - the runtime pins and why they are what they are;
-- the pinned upstream commit and the checkpoint;
+- the pinned upstream commit and the checkpoints (`MODELS`);
 - `prepare` (clone);
 - `Synthesizer`: the request contract, the serving endpoint's request handling.
 
@@ -61,7 +82,7 @@ databricks volumes create <CATALOG> <SCHEMA> <VOLUME> MANAGED --profile <PROFILE
 Layout:
 
 ```
-irodori_core.py                 runtime pins, pinned upstream, checkpoint; prepare / Synthesizer (shared by 1–3)
+irodori_core.py                 runtime pins, pinned upstream, checkpoints (MODELS); prepare / Synthesizer (shared by 1–3)
 scripts/install.sh              two-phase runtime install on serverless GPU (notebooks and the AIR job)
 notebooks/generate.py           way 1
 notebooks/test_serving_model.py runs serving/irodori_pyfunc.py in-process on a GPU, before registering
@@ -83,6 +104,7 @@ docs/REPORT.md                  PoC report: design decisions, pitfalls, benchmar
    - **sync** a local clone: `databricks sync . /Workspace/Users/<you>/model-irodori-tts-on-databricks --profile <PROFILE>`.
 2. Open `notebooks/generate` and attach it to **serverless GPU** compute: accelerator **A10**, environment version **4**.
 3. Fill in the widgets and *Run all*.
+   - `model`: `v4.1-small` or `v4-large` ([Choosing a model](#choosing-a-model)).
    - `text` is one utterance.
    - `params_json` takes **any** `params_json` key of the endpoint, e.g. `seed`, `caption`, `num_steps`,
      `duration_scale`.
@@ -119,22 +141,23 @@ The job:
 2. runs [`generate.py`](generate.py), which clones the pinned upstream and synthesizes one utterance;
 3. copies the WAV (and its `.json`) to the Volume.
 
-`generate.py --text … | --text-file …` reads the input. `--params '{...}'` takes any `params_json` key of the
-endpoint.
+`generate.py --text … | --text-file …` reads the input. `--model v4-large` picks the checkpoint (default
+`v4.1-small`). `--params '{...}'` takes any `params_json` key of the endpoint.
 
 ## 3. Model Serving
 
 ```bash
-# 1) put the repo in the workspace (as in way 1), then register (≈ 10–20 min on serverless GPU A10)
+# 1) put the repo in the workspace (as in way 1), then register (≈ 10–20 min on serverless GPU A10).
+#    "model": "v4.1-small" (default) or "v4-large"; give each its own uc_model, e.g. ...irodori_tts_large.
 databricks jobs submit --no-wait --profile <PROFILE> --json '{
   "run_name": "irodori-tts-register",
   "tasks": [{"task_key": "register",
              "notebook_task": {"notebook_path": "/Workspace/Users/<you>/model-irodori-tts-on-databricks/notebooks/register_serving",
-                               "base_parameters": {"uc_model": "<CATALOG>.<SCHEMA>.irodori_tts_express"}},
+                               "base_parameters": {"model": "v4.1-small", "uc_model": "<CATALOG>.<SCHEMA>.irodori_tts_express"}},
              "environment_key": "gpu", "compute": {"hardware_accelerator": "GPU_1xA10"}}],
   "environments": [{"environment_key": "gpu", "spec": {"client": "4"}}]}'
 databricks jobs get-run <run_id> --profile <PROFILE>              # wait for TERMINATED/SUCCESS
-databricks jobs get-run-output <task_run_id> --profile <PROFILE>  # notebook_output.result: {"uc_model", "version", "smoke"}
+databricks jobs get-run-output <task_run_id> --profile <PROFILE>  # notebook_output.result: {"uc_model", "model", "version", "smoke"}
 
 # 2) endpoint (GPU_MEDIUM = A10, the same GPU family the environment was packed on)
 databricks serving-endpoints create --no-wait --profile <PROFILE> --json '{
@@ -182,7 +205,7 @@ call the REST API with a 600–900 s timeout (the apps do).
 
 ## Measured results
 
-1× A10G, bf16 unless noted ([docs/REPORT.md](docs/REPORT.md) has the details):
+1× A10G, bf16, v4.1-Small unless noted ([docs/REPORT.md](docs/REPORT.md) has the details):
 
 | | |
 |---|---|
@@ -190,6 +213,7 @@ call the REST API with a 600–900 s timeout (the apps do).
 | Cold start (scale-from-zero) | ≈ 405 s |
 | Model time, 40 steps | bf16 1.30 s (RTF 15.4×), fp32 2.05 s (9.7×). Quantization saves VRAM, not time |
 | Registration job (env_pack) | ≈ 10 min (2026-10-13; 15–20 min in the PoC) |
+| **v4-Large**, endpoint `GPU_MEDIUM` (A10), warm | 7.0 s of audio in 5.3 s; 8.2 s in 4.4 s. Peak GPU memory 12.8 GiB (2026-10-14) |
 
 ## Troubleshooting
 
@@ -213,6 +237,21 @@ Upstream is pinned to Irodori-TTS commit `89f9d8fbd4d51ea019867ee1197725ede1df13
 ## Licence
 
 - **This repo's code:** MIT, like upstream (see [NOTICE.md](NOTICE.md)).
-- **Irodori-TTS code and weights:** MIT, © 2026 Aratako. Check the [repo](https://github.com/Aratako/Irodori-TTS)
-  and the [model card](https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small) for current terms before use.
+- **Irodori-TTS code and v4.1-Small weights:** MIT, © 2026 Aratako.
+- **v4-Large weights:** the [Gemma Terms of Use](https://ai.google.dev/gemma/terms). Its shared text/caption encoder
+  is derived from `google/t5gemma-2-1b-1b`. In short (not legal advice; read the terms):
+  - **Commercial use is allowed.** Google claims no rights in the outputs (§3.3); you are responsible for them.
+  - **Your own use** (including your organisation's internal endpoint) must follow the use restrictions of §3.2, i.e.
+    the [Gemma Prohibited Use Policy](https://ai.google.dev/gemma/prohibited_use_policy).
+  - **Serving it to third parties is "Distribution":** the terms count a hosted service (API, web) for a third party
+    as Distribution. Then put the §3.2 use restrictions into the terms of use your users agree to, and tell them the
+    model is subject to them.
+  - **Copies need notice:** pass on the terms. Copies other than through a hosted service need a `NOTICE` file:
+    "Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms".
+  - **Google may restrict** usage it believes violates the terms.
+  - **The model card adds:** no cloning or impersonation of a real person's voice without their consent, no deceptive
+    deepfakes or misinformation.
+- Check the [repo](https://github.com/Aratako/Irodori-TTS) and the model cards
+  ([Small](https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small), [Large](https://huggingface.co/Aratako/Irodori-TTS-v4-Large))
+  for current terms before use.
 - Upstream embeds an inaudible **SilentCipher** watermark in generated audio.

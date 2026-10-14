@@ -15,6 +15,7 @@
 
 # COMMAND ----------
 
+dbutils.widgets.dropdown("model", "v4.1-small", ["v4.1-small", "v4-large"], "model (README: Choosing a model)")
 dbutils.widgets.text("text", "こんにちは。これはデータブリックスのサーバーレス GPU で動く音声合成のテストです。", "text")
 dbutils.widgets.text("params_json", '{"seed": 42}', "params_json")
 dbutils.widgets.text("output_dir", "/Volumes/<CATALOG>/<SCHEMA>/<VOLUME>/irodori", "output_dir (UC Volume)")
@@ -49,7 +50,7 @@ assert "<" not in out_dir, "set output_dir to a UC Volume folder, e.g. /Volumes/
 
 core.prepare(dbutils.widgets.get("work_dir"))
 t0 = time.time()
-synth = core.Synthesizer()
+synth = core.Synthesizer(dbutils.widgets.get("model"))
 core.log(f"runtime loaded in {time.time() - t0:.0f}s")
 row = synth.handle(dbutils.widgets.get("text"), dbutils.widgets.get("params_json"))
 assert not row["error"], row["error"]

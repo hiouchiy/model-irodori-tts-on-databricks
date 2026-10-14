@@ -19,7 +19,8 @@ class IrodoriTTSModel(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
         import irodori_core as core
         cfg = (getattr(context, "model_config", None) or {}) if context is not None else {}
-        self._synth = core.Synthesizer(cfg.get("hf_checkpoint", core.HF_CHECKPOINT), cfg.get("precision"))
+        # "model" (a key of irodori_core.MODELS) since both checkpoints exist; older registrations recorded "hf_checkpoint".
+        self._synth = core.Synthesizer(cfg.get("model") or cfg.get("hf_checkpoint"), cfg.get("precision"))
 
     def predict(self, context, model_input, params=None):
         if isinstance(model_input, pd.DataFrame):

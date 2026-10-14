@@ -31,11 +31,13 @@ import pandas as pd
 REPO = os.path.abspath("..")
 sys.path[:0] = [REPO, os.path.join(REPO, "serving")]
 import irodori_core as core  # noqa: E402
+dbutils.widgets.dropdown("model", core.DEFAULT_MODEL, sorted(core.MODELS), "model (checkpoint)")
+os.environ["IRODORI_MODEL"] = core.model_name(dbutils.widgets.get("model"))
 core.prepare("/tmp/irodori")
 from irodori_pyfunc import IrodoriTTSModel  # noqa: E402
 
 m = IrodoriTTSModel()
-m.load_context(None)
+m.load_context(None)   # the model: $IRODORI_MODEL, set from the widget above
 req = pd.DataFrame([{"text": "こんにちは。サービング用モデルのテストです。", "params_json": json.dumps({"seed": 42})},
                     {"text": "", "params_json": json.dumps({"__list_params__": True})},
                     {"text": "テスト", "params_json": json.dumps({"ref_wav_b64": base64.b64encode(b"not a wav").decode()})}])
@@ -48,6 +50,6 @@ print(json.dumps({k: v for k, v in ok.items() if k != "audio_wav_b64"}, ensure_a
 # COMMAND ----------
 
 import torch  # noqa: E402
-dbutils.notebook.exit(json.dumps({"synth_ok": True, "audio_seconds": ok["audio_seconds"], "synth_seconds": ok["synth_seconds"],
+dbutils.notebook.exit(json.dumps({"model": os.environ["IRODORI_MODEL"], "synth_ok": True, "audio_seconds": ok["audio_seconds"], "synth_seconds": ok["synth_seconds"],
                                   "list_params_ok": True, "bad_param_error": bad["error"][:200],
                                   "peak_gib": round(torch.cuda.max_memory_allocated() / 2**30, 2)}))

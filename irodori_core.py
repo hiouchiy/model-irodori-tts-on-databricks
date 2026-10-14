@@ -1,6 +1,6 @@
 """Irodori-TTS core, shared by the notebook, the AI Runtime batch job and the serving model.
 
-One place for: the runtime pins, the pinned upstream commit, the checkpoint, preparing a working directory (clone),
+One place for: the runtime pins, the pinned upstream commit, the checkpoints (MODELS), preparing a working directory (clone),
 and the request contract (`text` + `params_json` -> one WAV; docs/SERVING-API.md). The three ways to run
 (notebooks/generate.py, air_job/generate.yaml via generate.py, serving/irodori_pyfunc.py) only add their own input
 and output handling on top.
@@ -27,7 +27,18 @@ os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
 UPSTREAM_REPO = "https://github.com/Aratako/Irodori-TTS.git"
 UPSTREAM_SHA = "89f9d8fbd4d51ea019867ee1197725ede1df13c5"   # 2026-09-12 (pinned)
-HF_CHECKPOINT = "Aratako/Irodori-TTS-v4.1-Small"
+# The checkpoints, pinned to Hub revisions. Both run on the same upstream commit (89f9d8f added v4-Large support).
+# - v4.1-small: 0.8B, MIT. The better kanji reading of the two (upstream's Joyo / JSUT benchmarks).
+# - v4-large: 3.29B, its text/caption encoder is derived from google/t5gemma-2-1b-1b, so the model is under the Gemma
+#   Terms of Use (NOTICE.md). Better voice design (caption adherence) and voice cloning (speaker similarity).
+MODELS = {
+    "v4.1-small": dict(repo="Aratako/Irodori-TTS-v4.1-Small", revision="2b28324dc263ed5e6638b3cf3dd94c82ead07b4b",
+                       licence="MIT"),
+    "v4-large": dict(repo="Aratako/Irodori-TTS-v4-Large", revision="2e0c55428ce97268a507f1feeb2478f8d9148e8b",
+                     licence="Gemma Terms of Use"),
+}
+DEFAULT_MODEL = "v4.1-small"
+HF_CHECKPOINT = MODELS[DEFAULT_MODEL]["repo"]   # the name registrations before MODELS existed recorded
 
 # The runtime: torch 2.10 / cu128, as upstream's uv.lock. scripts/install.sh installs it in two phases.
 TORCH_INDEX = "https://download.pytorch.org/whl/cu128"
@@ -76,6 +87,24 @@ def prepare(work: str | Path = "/tmp/irodori") -> Path:
     return repo
 
 
+def model_name(name: str | None = None) -> str:
+    """A key of MODELS: `name`, else $IRODORI_MODEL, else the default. A Hub repo id of one of them is accepted too."""
+    name = name or os.environ.get("IRODORI_MODEL") or DEFAULT_MODEL
+    for key, m in MODELS.items():
+        if name in (key, m["repo"]):
+            return key
+    raise ValueError(f"model must be one of {sorted(MODELS)}")
+
+
+def download_checkpoint(model: str | None = None) -> str:
+    """The model.safetensors path of `model` at its pinned revision (the files upstream's download_hf_checkpoint takes)."""
+    from huggingface_hub import snapshot_download
+    m = MODELS[model_name(model)]
+    snap = Path(snapshot_download(repo_id=m["repo"], revision=m["revision"],
+                                  allow_patterns=["model.safetensors", "tokenizer/*"]))
+    return str(snap / "model.safetensors")
+
+
 def parse_params(params_json: Any) -> dict:
     """The `params_json` column: a JSON object string, a dict, or empty."""
     if isinstance(params_json, str) and params_json.strip():
@@ -88,13 +117,14 @@ def parse_params(params_json: Any) -> dict:
 class Synthesizer:
     """One loaded Irodori-TTS runtime. `synthesize` returns one response row of the endpoint."""
 
-    def __init__(self, checkpoint: str = HF_CHECKPOINT, precision: str | None = None):
+    def __init__(self, model: str | None = None, precision: str | None = None):
+        """model: a key of MODELS (or its Hub repo id); default $IRODORI_MODEL, else v4.1-small."""
         import torch
-        from irodori_tts.inference_runtime import (InferenceRuntime, RuntimeKey, SamplingRequest,
-                                                   download_hf_checkpoint)
+        from irodori_tts.inference_runtime import InferenceRuntime, RuntimeKey, SamplingRequest
         device = "cuda" if torch.cuda.is_available() else "cpu"
         precision = precision or ("bf16" if device == "cuda" else "fp32")
-        ckpt = download_hf_checkpoint(checkpoint)
+        self.model = model_name(model)
+        ckpt = download_checkpoint(self.model)
         self._runtime = InferenceRuntime.from_key(RuntimeKey(
             checkpoint=ckpt, model_device=device, model_precision=precision,
             codec_device=device, codec_precision=precision))

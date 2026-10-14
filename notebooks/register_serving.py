@@ -17,6 +17,9 @@
 # MAGIC
 # MAGIC The HF checkpoint is not bundled (the upload got too big); the endpoint downloads it at load, so the serving
 # MAGIC environment needs Hub egress.
+# MAGIC
+# MAGIC `model` picks the checkpoint (`irodori_core.MODELS`): `v4.1-small` (MIT) or `v4-large` (Gemma Terms of Use).
+# MAGIC Register each as its own UC model and serve it from its own endpoint (README "Choosing a model").
 
 # COMMAND ----------
 
@@ -41,14 +44,17 @@ REPO = os.path.abspath("..")
 sys.path[:0] = [REPO, os.path.join(REPO, "serving")]
 import irodori_core as core  # noqa: E402
 
+dbutils.widgets.dropdown("model", core.DEFAULT_MODEL, sorted(core.MODELS), "model (checkpoint)")
 dbutils.widgets.text("uc_model", "<CATALOG>.<SCHEMA>.irodori_tts_express", "UC model (catalog.schema.name)")
+MODEL = core.model_name(dbutils.widgets.get("model"))
 UC_MODEL = dbutils.widgets.get("uc_model")
 assert "<" not in UC_MODEL, "set uc_model to <catalog>.<schema>.<model>"
+os.environ["IRODORI_MODEL"] = MODEL   # the smoke test's load_context(None) picks it up
 
 WORK = "/tmp/irodori"
 UPSTREAM = core.prepare(WORK)
 import torch  # noqa: E402
-core.log(f"torch {torch.__version__} cuda={torch.cuda.is_available()} upstream @ {core.UPSTREAM_SHA[:7]}")
+core.log(f"torch {torch.__version__} cuda={torch.cuda.is_available()} upstream @ {core.UPSTREAM_SHA[:7]} model {MODEL}")
 
 # COMMAND ----------
 
@@ -64,7 +70,8 @@ m.load_context(None)
 row = m.predict(None, pd.DataFrame([{"text": "こんにちは。これはデータブリックスのモデルサービング上で動く音声合成のテストです。",
                                      "params_json": json.dumps({"seed": 42})}])).to_dict(orient="records")[0]
 assert not row["error"], row["error"]
-SMOKE = {"audio_seconds": row["audio_seconds"], "synth_seconds": row["synth_seconds"]}
+SMOKE = {"model": MODEL, "audio_seconds": row["audio_seconds"], "synth_seconds": row["synth_seconds"],
+         "peak_gib": round(torch.cuda.max_memory_allocated() / 2**30, 2)}
 core.log(f"smoke ok: {SMOKE}")
 del m; torch.cuda.empty_cache()
 
@@ -93,7 +100,8 @@ info = mlflow.pyfunc.log_model(
     name="irodori_tts",
     python_model=pyfunc,
     code_paths=[f"{code_dir}/irodori_tts", f"{code_dir}/irodori_core.py"],
-    model_config={"hf_checkpoint": core.HF_CHECKPOINT, "precision": "bf16", "upstream_sha": core.UPSTREAM_SHA},
+    model_config={"model": MODEL, "hf_checkpoint": core.MODELS[MODEL]["repo"], "revision": core.MODELS[MODEL]["revision"],
+                  "precision": "bf16", "upstream_sha": core.UPSTREAM_SHA},
     input_example=input_example,
     extra_pip_requirements=core.SERVING_PIP_REQUIREMENTS,   # no URLs / git: keeps env_pack happy
 )
@@ -104,4 +112,4 @@ core.log(f"registered {UC_MODEL} version {mv.version} in {time.time() - t0:.0f}s
 
 # COMMAND ----------
 
-dbutils.notebook.exit(json.dumps({"uc_model": UC_MODEL, "version": mv.version, "smoke": SMOKE}))
+dbutils.notebook.exit(json.dumps({"uc_model": UC_MODEL, "model": MODEL, "version": mv.version, "smoke": SMOKE}))

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Synthesize one Japanese utterance with Irodori-TTS (Aratako/Irodori-TTS-v4.1-Small) to a WAV.
+"""Synthesize one Japanese utterance with Irodori-TTS (v4.1-Small or v4-Large; irodori_core.MODELS) to a WAV.
 
 The entry point of the AI Runtime batch job (air_job/generate.yaml). Any machine with a CUDA GPU and the runtime
 from scripts/install.sh can run it too. The request handling is irodori_core.Synthesizer, shared with the notebook
@@ -24,11 +24,13 @@ def main() -> None:
     ap.add_argument("--out", required=True, help="Output .wav path (local disk; copy to a Volume afterwards)")
     ap.add_argument("--params", default="{}", help="JSON object of endpoint parameters (seed, caption, num_steps, ...)")
     ap.add_argument("--work", default="/tmp/irodori", help="Where the pinned upstream is cloned")
+    ap.add_argument("--model", default=None, choices=sorted(core.MODELS),
+                    help="checkpoint (default: $IRODORI_MODEL, else v4.1-small); README 'Choosing a model'")
     args = ap.parse_args()
 
     text = args.text if args.text is not None else Path(args.text_file).read_text(encoding="utf-8").strip()
     core.prepare(args.work)
-    synth = core.Synthesizer()
+    synth = core.Synthesizer(args.model)
     row = synth.handle(text, json.loads(args.params))
     if row["error"]:
         raise SystemExit(f"[irodori] synthesis failed: {row['error']}")
